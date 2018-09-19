@@ -97,12 +97,13 @@ describe('flow should work', () => {
     const dependenciesM = { './a.js': ['./b.js'], './b.js': ['./c.js'], './c.js': ['./a.js'] }
 
     fs.readFile = (file, encoding, done) => {
-      return dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from ${file}}`).join('\n') +
+      return done(null, dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from '${x}'`).join('\n') +
         `\nexport default '${file}'`
+      )
     }
 
     flow('./a.js', {}, {}, (err) => {
-      expect(err).toBeInstanceOf(err)
+      expect(err).toBeInstanceOf(Error)
     })
   })
 })

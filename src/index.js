@@ -26,8 +26,6 @@ export const flow = (file: string, dependenciesM: { [string]: string[] }, codesM
       return done(Error('cycle dependency: ' + cycled.map(x => x.join(' -> ')).join(' & ')))
     }
 
-    console.log('not cycled')
-
     // transform
     // this should be done after analysis
     // because extname maybe have been appended
@@ -39,8 +37,6 @@ export const flow = (file: string, dependenciesM: { [string]: string[] }, codesM
 
     const l = dependencies.length
 
-    console.log('dependencies.length', l)
-
     const next = i => {
       if (i === l) {
         return done(null, dependenciesM, codesM)
@@ -51,7 +47,6 @@ export const flow = (file: string, dependenciesM: { [string]: string[] }, codesM
       }
 
       flow(dependencies[i], dependenciesM, codesM, (err) => {
-        console.log('through flow next')
         if (err) {
           return done(err)
         }
