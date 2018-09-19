@@ -83,7 +83,7 @@ describe('flow should work', () => {
     }
 
     fs.readFile = (file, encoding, done) => {
-      return done(null, dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from '${file}'`).join('\n') +
+      return done(null, dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from '${x}'`).join('\n') +
         `\nexport default '${file}'`
       )
     }
