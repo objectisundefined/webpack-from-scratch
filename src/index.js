@@ -69,6 +69,7 @@ export const analysis = ast => {
         if (!path.node.value.match(/\.js[x]?$/)) {
           path.replaceWith(types.expressionStatement(types.stringLiteral(path.node.value + '.js')))
 
+          // early return, traverse from the start of replaced part again
           return
         }
 
