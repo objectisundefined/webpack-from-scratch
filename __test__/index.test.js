@@ -2,9 +2,9 @@
 const { parse } = require('@babel/core')
 const fs = require('fs')
 
-import { analysis, cycle, generate, flow } from '../src'
+import webpack, { analysis, cycle, generate, flow } from '../src'
 
-describe('library works', () => {
+describe('analysis works', () => {
   test('analysis should work on normal case', () => {
     const source = `
       import a from './a.js'
@@ -24,7 +24,7 @@ describe('library works', () => {
   })
 })
 
-describe('cycle shoule work', () => {
+describe('cycle works', () => {
   test('cycle shoule work on no cycled case', () => {
     const dependenciesM = { './a.js': ['./b.js', './c.js'] }
 
@@ -44,32 +44,26 @@ describe('cycle shoule work', () => {
   })
 })
 
-describe('generate should work', () => {
+describe('generate works', () => {
   test('generate should work on normal case', () => {
     const codesM = {
       './a.js': 'require(\'./b.js\')',
       './b.js': 'module.exports = \'b\''
     }
 
-    const code = generate('./a.js', Object.entries(codesM))
-
-    expect(() => parse(code)).not.toThrow()
-  })
-
-  test('generate should work when receive none [string, string] tuple', () => {
-    const code = generate('./a.js', Object.entries({ './a.js': {} }))
+    const code = generate('./a.js', codesM)
 
     expect(() => parse(code)).not.toThrow()
   })
 })
 
-describe('flow should work', () => {
+describe('flow works', () => {
   test('flow should work on readFile error case', () => {
-    fs.readFile = jest.fn((file, encoding, done) => {
+    fs.readFile = (file, encoding, done) => {
       done(Error(file + ' not found'))
-    })
+    }
 
-    flow('./d.js', {}, {}, (err) => {
+    flow('./a.js', (err) => {
       expect(err).toBeInstanceOf(Error)
     })
   })
@@ -88,7 +82,7 @@ describe('flow should work', () => {
       )
     }
 
-    flow('./a.js', {}, {}, (err) => {
+    flow('./a.js', (err) => {
       expect(err).toBe(null)
     })
   })
@@ -102,10 +96,66 @@ describe('flow should work', () => {
       )
     }
 
-    flow('./a.js', {}, {}, (err) => {
+    flow('./a.js', (err) => {
       expect(err).toBeInstanceOf(Error)
     })
   })
 })
 
-// describe('webpack shoule work', () => {})
+describe('webpack works', () => {
+  test('webpack should work on flow error case', () => {
+    fs.readFile = (file, encoding, done) => {
+      done(Error(file + ' not found'))
+    }
+
+    webpack({ entry: './a.js', output: './bundle.js' }, (err) => {
+      expect(err).toBeInstanceOf(Error)
+    })
+  })
+
+  test('webpack should work on writeFile error case', () => {
+    const dependenciesM = {
+      './a.js': []
+    }
+
+    fs.readFile = (file, encoding, done) => {
+      return done(null, dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from '${x}'`).join('\n') +
+        `\nexport default '${file}'`
+      )
+    }
+
+    fs.writeFile = (file, data, done) => {
+      return done(Error('write file error'))
+    }
+
+    webpack({ entry: './a.js', output: './bundle.js' }, (err) => {
+      expect(err).toBeInstanceOf(Error)
+    })
+  })
+
+  test('webpack should work on normal case', () => {
+    const dependenciesM = {
+      './a.js': ['./b.js', './c.js'],
+      './b.js': ['./c.js', './d.js'],
+      './c.js': [],
+      './d.js': []
+    }
+
+    fs.readFile = (file, encoding, done) => {
+      return done(null, dependenciesM[file].map(x => `import ${x.match(/\/(.*)?.js$/)[1]} from '${x}'`).join('\n') +
+        `\nexport default '${file}'`
+      )
+    }
+
+    let code
+
+    fs.writeFile = (file, data, done) => {
+      code = data
+      done()
+    }
+
+    webpack({ entry: './d.js', output: './bundle.js' }, (err) => {
+      expect(() => parse(code)).not.toThrow()
+    })
+  })
+})

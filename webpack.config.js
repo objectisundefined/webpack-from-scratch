@@ -3,7 +3,7 @@ const path = require('path')
 module.exports = {
   // mode: 'development',
   mode: 'production',
-  entry: path.resolve(__dirname, './src/a.js'),
+  entry: path.resolve(__dirname, './src'),
   target: 'node',
   module: {
     rules: [
@@ -15,9 +15,6 @@ module.exports = {
     ]
   },
   output: {
-    path: path.resolve(__dirname, './dist'),
-    filename: 'fun.js',
-    library: 'fun',
-    libraryTarget: 'umd'
+    filename: 'index.js'
   }
 }

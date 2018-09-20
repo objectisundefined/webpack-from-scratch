@@ -4,9 +4,9 @@
   "main": "src/index.js",
   "license": "MIT",
   "scripts": {
-    "build": "yarn run test && webpack",
+    "build": "babel src/ -d dist/",
     "test": "flow && yarn run jest",
-    "coverage": "yarn test -- --coverage",
+    "coverage": "yarn test --coverage",
     "ci": "yarn run coverage && cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
   "devDependencies": {

@@ -2,61 +2,70 @@
 
 const fs = require('fs')
 
+type DependenciesM = { [string]: string[] }
+type CodesM = { [string]: string }
+type CompleteCall = (err: Error | null, dependenciesM: DependenciesM, codesM: CodesM) => void
+type Options = { entry: string, output: string }
+
 const { parse, transformFromAst, traverse, types } = require('@babel/core')
 
-export const flow = (file: string, dependenciesM: { [string]: string[] }, codesM: { [string]: string }, done: (err: Error | null, dependenciesM?: { [string]: string[] }, codesM?: { [string]: string }) => void) => {
-  fs.readFile(file, 'utf-8', (err, res) => {
-    if (err) {
-      return done(Error('read file err: ' + err.message))
-    }
-
-    // parse
-    const ast = parse(res, {
-      sourceType: 'module'
-    })
-
-    const dependencies = analysis(ast)
-
-    dependenciesM[file] = dependencies
-
-    // analysis
-    const cycled = cycle(file, dependenciesM)
-
-    if (cycled.length) {
-      return done(Error('cycle dependency: ' + cycled.map(x => x.join(' -> ')).join(' & ')))
-    }
-
-    // transform
-    // this should be done after analysis
-    // because extname maybe have been appended
-    const { code } = transformFromAst(ast, null, {
-      presets: ['@babel/preset-env']
-    })
-
-    codesM[file] = code
-
-    const l = dependencies.length
-
-    const next = i => {
-      if (i === l) {
-        return done(null, dependenciesM, codesM)
+export const flow = (entry: string, done: CompleteCall) => {
+  const fn = (file: string, dependenciesM: DependenciesM, codesM: CodesM, done: CompleteCall) => {
+    fs.readFile(file, 'utf-8', (err, res) => {
+      if (err) {
+        return done(Error('read file err: ' + err.message), {}, {})
       }
 
-      if (codesM[dependencies[i]]) {
-        return next(i + 1)
+      // parse
+      const ast = parse(res, {
+        sourceType: 'module'
+      })
+
+      const dependencies = analysis(ast)
+
+      dependenciesM[file] = dependencies
+
+      // analysis
+      const cycled = cycle(entry, dependenciesM)
+
+      if (cycled.length) {
+        return done(Error('cycle dependency: ' + cycled.map(x => x.join(' -> ')).join(' & ')), {}, {})
       }
 
-      flow(dependencies[i], dependenciesM, codesM, (err) => {
-        if (err) {
-          return done(err)
+      // transform
+      // this should be done after analysis
+      // because extname maybe have been appended
+      const { code } = transformFromAst(ast, null, {
+        presets: ['@babel/preset-env']
+      })
+
+      codesM[file] = code
+
+      const l = dependencies.length
+
+      const next = i => {
+        if (i === l) {
+          return done(null, dependenciesM, codesM)
         }
 
-        next(i + 1)
-      })
-    }
+        if (codesM[dependencies[i]]) {
+          return next(i + 1)
+        }
 
-    next(0)
-  })
+        fn(dependencies[i], dependenciesM, codesM, (err) => {
+          if (err) {
+            return done(err, {}, {})
+          }
+
+          next(i + 1)
+        })
+      }
+
+      next(0)
+    })
+  }
+
+  return fn(entry, {}, {}, done)
 }
 
 export const analysis = ast => {
@@ -81,7 +90,7 @@ export const analysis = ast => {
   return dependencies
 }
 
-export const cycle = (file: string, dependenciesM: { [string]: string[] }) => {
+export const cycle = (file: string, dependenciesM: DependenciesM) => {
   const fn = (arr, file, dependenciesM) => {
     const dependencies = dependenciesM[file] || []
 
@@ -105,17 +114,13 @@ export const cycle = (file: string, dependenciesM: { [string]: string[] }) => {
   return fn([file], file, dependenciesM)
 }
 
-export const generate = (entry: string, moduels: [string, mixed][]) => {
+export const generate = (entry: string, codesM: CodesM) => {
+  const moduels = Object.keys(codesM)
+
   const arr = moduels.map(x => {
-    let code = ''
+    let code = codesM[x]
 
-    if (typeof x[1] !== 'string') {
-      code = `throw Error('[generate] unkonw mixed code type: ${typeof x[1]}')`
-    } else {
-      code = x[1]
-    }
-
-    return `"${x[0]}": (function (module, exports, require) {
+    return `"${x}": (function (module, exports, require) {
     ${code}
   })`})
 
@@ -123,25 +128,25 @@ export const generate = (entry: string, moduels: [string, mixed][]) => {
 
   return (`(function (modules) {
     var installedModules = {};
-  
+
     function __webpack_require__(moduleId) {
       if (installedModules[moduleId]) {
         return installedModules[moduleId].exports;
       }
-  
+
       var module = installedModules[moduleId] = {
         i: moduleId,
         l: false,
         exports: {}
       };
-  
+
       modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
       // Flag the module as loaded
       module.l = true;
       // Return the exports of the module
       return module.exports;
     }
-  
+
     // expose the modules object (__webpack_modules__)
     __webpack_require__.m = modules;
     // expose the module cache
@@ -196,9 +201,29 @@ export const generate = (entry: string, moduels: [string, mixed][]) => {
     // __webpack_public_path__
     __webpack_require__.p = "";
     // Load entry module and return exports
-    return __webpack_require__(__webpack_require__.s = "${entry}");
+    return __webpack_require__(__webpack_require__.s = '${entry}');
   })({
    ${str}
   });
   `)
 }
+
+const webpack = (options: Options, done: (err?: Error) => void) => {
+  const { entry, output } = options
+
+  flow(entry, (err, dependenciesM, codesM) => {
+    if (err) {
+      return done(Error('flow error: ' + err.message))
+    }
+
+    fs.writeFile(output, generate(entry, codesM), (err) => {
+      if (err) {
+        return done(Error('write file error: ' + err.message))
+      }
+
+      done()
+    })
+  })
+}
+
+export default webpack
